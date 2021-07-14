@@ -1,0 +1,1 @@
+файл BlynkSimpleEsp8266.h нужно поместить в папку заменяя оригинал c:\Users\User\Documents\Arduino\libraries\Blynk\src\
