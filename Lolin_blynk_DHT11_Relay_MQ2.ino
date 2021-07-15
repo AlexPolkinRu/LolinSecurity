@@ -1,20 +1,18 @@
 /*****************************
-  = Система умный дом v.1.3 =
+  = Система умный дом v.1.4 =
   Полочкин Александр Андреевич
   sunches@yandex.ru
 ******************************
 Пины Blynk
 V0 - Терминал
 V1 - Поддержание температуры
-V2 - 
-V3 - 
+V2 - Для отправки значения температуры
+V3 - Для отправки значения влажности
 V4 - Сигнализация 
-V5 - 
+V5 - Для отправки значения примесей в воздухе
 ******************************/
 
 /* TODO
-1. Отправлять на почту сообщения о включении и выключении обогревателя
-2. При достижении заданной температуры принудительно отключать обогреватель 
 
 */
 
@@ -22,13 +20,14 @@ V5 -
 #define PIN_RELAY 15 // Подключаем реле к D8 = GPIO15 - 
 #define PIN_DHT 16   // Подключаем DHT к D0 = GPIO16 - Зелёный
 #define PIN_MQ2 A0   // Подключаем MQ2 к A0 - Жёлтый
-#define PIN_PIR 5   // Подключаем датчик движения к D1 = GPIO5 - Оранжевый
+#define PIN_PIR 5    // Подключаем датчик движения к D1 = GPIO5 - Оранжевый
 #define NUMBER_OF_SSID 4   // Количество точек доступа
-#define MAX_TEMPERATURE 30  // Максимальная температура в комнате
+#define MAX_TEMPERATURE 30 // Максимальная температура в комнате
 
 #define PIR_DELAY 20000 // Задержка срабатывания датчика движения 20 сек
 #define OVERHEATING_DELAY 300000 // Задержка оповещения от перегреве 5 мин
 
+#define EMAIL "arhiv.foto2017@yandex.ru" // Почта для отправки сообщений
 
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
@@ -40,7 +39,7 @@ V5 -
 #include <ArduinoOTA.h>
 
 
-char auth[] = "41IG8O9I7fZHl8sJmVANpUHkKsOlwg3J*";  //Ключ авторизации Blynk
+char auth[] = "41IG8O9I7fZHl8sJmVANpUHkKsOlwg3J";  //Ключ авторизации Blynk
 
 // Варианты сетей
 char* net[NUMBER_OF_SSID] = {"AlexP", "FreeWifi", "MGTS_GPON_3107", "Pressa"};  // Названия сетей
@@ -77,8 +76,8 @@ void setup() // Действия при запуске ESP8266
      
   dht.setup(PIN_DHT, DHTesp::DHT11); 
 
-  // Отправляем данные на сервер каждую третью секунду
-  timer.setInterval(3000L, Send);
+  // Главный цикл выполнения каждую третью секунду
+  timer.setInterval(3000L, mainLoop);
 
   // Проверяем WiFi и пробуем подключится, если нет соединения каждые 10 секунд
   timer.setInterval(10000L, controlWiFi);
@@ -86,6 +85,9 @@ void setup() // Действия при запуске ESP8266
   // Синхронизация времени раз в 10 мин
   setSyncInterval(10 * 60);
 
+  // Перезагрузка каждый час
+  timer.setInterval(3600000L, Reset);
+  
   // Обновление по воздуху
   ArduinoOTA.onStart([]() {
     String type;
@@ -129,8 +131,8 @@ BLYNK_CONNECTED() {
 
   Blynk.syncVirtual(V1, V4); // Получаем с сервера состояние 
 
-  terminal.println("3 2 1 ...");
-  Blynk.email("arhiv.foto2017@yandex.ru", "Кондрово", getDateTime() + " Умный дом запущен");
+  //terminal.println("3 2 1 ...");
+  Blynk.email(EMAIL, "Кондрово", getDateTime() + " Умный дом запущен");
  
   if (digitalRead(PIN_RELAY)) relayOn = false;
   else relayOn = true;
@@ -177,40 +179,25 @@ BLYNK_WRITE(V4) // Включение сигнализации
 
 String getDateTime() // Определяем дату и время
 {
-  //String gTime = String(hour()) + ":" + minute() + ":" + second();
-  //String gDate = String(day()) + "." + month() + "." + year();
-  String gTime = get0Digits(hour()) + ":" + get0Digits(minute()) + ":" + get0Digits(second());
-  String gDate = get0Digits(day()) + "." + get0Digits(month()) + "." + year();
-  return (gDate + " " + gTime);
+  return (String(day()) + "." + month() + "." + year() + " " + hour() + ":" + minute() + ":" + second());
 }
 
-String get0Digits(int digits) // Подставляем ведущий ноль 
-{
-  if (sizeof(digits) < 1)
-    return ("0" + String(digits));
-  else
-    return String(digits);
+void(* resetFunc) (void) = 0; // Объявляем функцию reset
+
+void Reset(){
+  resetFunc();
 }
 
-void Send() // Замеряем климат и отправляем в Blynk
-{
+void mainLoop() { // Главный цикл 
+  Send();
+  controlPIR();
+  controlTemp();
+}
+
+void Send() {// Замеряем климат и отправляем в Blynk
   t = dht.getTemperature();
   h = dht.getHumidity();
   gas = analogRead(PIN_MQ2);
-
-  // Обнаружение движения
-    if (secureOn and (digitalRead(PIN_PIR)) and ((millis() - detectTime) > PIR_DELAY))
-  {
-    detectTime = millis(); // записываем время обнаружения движения
-    
-    Blynk.notify("Обнаружено движение!");
-    
-    Blynk.email("arhiv.foto2017@yandex.ru", "Кондрово", getDateTime() + " - Обнаружено движение!");
-    
-    Serial.println("Обнаружено движение!");
-    terminal.println("\n" + getDateTime() + " - Обнаружено движение!");
-    terminal.flush();
-  }
   
   Serial.print("t = ");
   Serial.print(t);
@@ -225,13 +212,23 @@ void Send() // Замеряем климат и отправляем в Blynk
   
   terminal.print('.');
   terminal.flush();
-
-  controlTemp();
 }
 
-void controlTemp() // Управление температурой
-{
+void controlPIR() { // Контроль присутствия
+  if (secureOn and (digitalRead(PIN_PIR)) and ((millis() - detectTime) > PIR_DELAY)) {
+    detectTime = millis(); // записываем время обнаружения движения
+    
+    Blynk.notify("Обнаружено движение!");
+    
+    Blynk.email(EMAIL, "Кондрово", getDateTime() + " - Обнаружено движение!");
+    
+    Serial.println("Обнаружено движение!");
+    terminal.println("\n" + getDateTime() + " - Обнаружено движение!");
+    terminal.flush();
+  }
+}
 
+void controlTemp() { // Управление температурой
   if (t >= MAX_TEMPERATURE) // При достижении MAX_TEMPERATURE принудительно отключать обогреватель 
   {
     relayOn = false;
@@ -239,7 +236,7 @@ void controlTemp() // Управление температурой
     if ((millis() - overheatingTime) > OVERHEATING_DELAY)
     {
       overheatingTime = millis();
-      Blynk.email("arhiv.foto2017@yandex.ru", "Кондрово", getDateTime() + " Перегрев: Конвектор ОТКЛючен");
+      Blynk.email(EMAIL, "Кондрово", getDateTime() + " Перегрев: Конвектор ОТКЛючен");
       terminal.println("\nПерегрев: Конвектор ОТКЛючен");
     }
   }
@@ -249,7 +246,7 @@ void controlTemp() // Управление температурой
     {
       relayOn = false;
       digitalWrite(PIN_RELAY, LOW); // выключаем реле
-      Blynk.email("arhiv.foto2017@yandex.ru", "Кондрово", getDateTime() + " Конвектор ОТКЛючен");
+      Blynk.email(EMAIL, "Кондрово", getDateTime() + " Конвектор ОТКЛючен");
       terminal.println("\nКонвектор ОТКЛючен");
     }
     
@@ -259,7 +256,7 @@ void controlTemp() // Управление температурой
       {
         relayOn = false; 
         digitalWrite(PIN_RELAY, LOW); // Если перегрев выключаем реле
-        Blynk.email("arhiv.foto2017@yandex.ru", "Кондрово", getDateTime() + " Конвектор ОТКЛючен");
+        Blynk.email(EMAIL, "Кондрово", getDateTime() + " Конвектор ОТКЛючен");
         terminal.println("\nКонвектор ОТКЛючен");
       }
       
@@ -267,7 +264,7 @@ void controlTemp() // Управление температурой
       {
         relayOn = true;
         digitalWrite(PIN_RELAY, HIGH); // Если недогрев включаем реле
-        Blynk.email("arhiv.foto2017@yandex.ru", "Кондрово", getDateTime() + " Конвектор ВКЛючен");
+        Blynk.email(EMAIL, "Кондрово", getDateTime() + " Конвектор ВКЛючен");
         terminal.println("\nКонвектор ВКЛючен");
       }
     }
@@ -291,7 +288,6 @@ void controlWiFi() // Управление соединением
       (i == NUMBER_OF_SSID - 1) ? i = 0 : i++;
     } 
   }
- 
 }
 
 void loop()
