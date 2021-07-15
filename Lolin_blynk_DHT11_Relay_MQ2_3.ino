@@ -40,7 +40,7 @@ V5 -
 #include <ArduinoOTA.h>
 
 
-char auth[] = "41IG8O9I7fZHl8sJmVANpUHkKsOlwg3J";  //Ключ авторизации Blynk
+char auth[] = "41IG8O9I7fZHl8sJmVANpUHkKsOlwg3J*";  //Ключ авторизации Blynk
 
 // Варианты сетей
 char* net[NUMBER_OF_SSID] = {"AlexP", "FreeWifi", "MGTS_GPON_3107", "Pressa"};  // Названия сетей
