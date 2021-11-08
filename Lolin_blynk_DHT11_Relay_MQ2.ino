@@ -39,11 +39,11 @@ V5 - Для отправки значения примесей в воздухе
 #include <ArduinoOTA.h>
 
 
-char auth[] = "41IG8O9I7fZHl8sJmVANpUHkKsOlwg3J";  //Ключ авторизации Blynk
+char auth[] = "*********************";  //Ключ авторизации Blynk
 
 // Варианты сетей
 char* net[NUMBER_OF_SSID] = {"AlexP", "FreeWifi", "MGTS_GPON_3107", "Pressa"};  // Названия сетей
-char* pass[NUMBER_OF_SSID] = {"4953211674", "4953211674", "b4996105643", "1234567899"};  // Пароли к сетям
+char* pass[NUMBER_OF_SSID] = {"**********", "**********", "**********", "**********"};  // Пароли к сетям
 
 float t; // Температура -5.0 - 50.0
 uint8_t h; // Влажность 0 - 100
