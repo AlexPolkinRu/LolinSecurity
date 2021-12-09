@@ -17,10 +17,11 @@ V5 - Для отправки значения примесей в воздухе
 */
 
 #define BLYNK_PRINT Serial
-#define PIN_RELAY 15 // Подключаем реле к D8 = GPIO15 - 
 #define PIN_DHT 16   // Подключаем DHT к D0 = GPIO16 - Зелёный
-#define PIN_MQ2 A0   // Подключаем MQ2 к A0 - Жёлтый
 #define PIN_PIR 5    // Подключаем датчик движения к D1 = GPIO5 - Оранжевый
+#define PIN_WDT 14   // Подключаем сторожевой таймер к D5 = GPIO14 -
+#define PIN_RELAY 15 // Подключаем реле к D8 = GPIO15 -
+#define PIN_MQ2 A0   // Подключаем MQ2 к A0 - Жёлтый
 #define NUMBER_OF_SSID 4   // Количество точек доступа
 #define MAX_TEMPERATURE 30 // Максимальная температура в комнате
 
@@ -29,25 +30,30 @@ V5 - Для отправки значения примесей в воздухе
 
 #define EMAIL "arhiv.foto2017@yandex.ru" // Почта для отправки сообщений
 
+// Для WiFi
 #include <ESP8266WiFi.h>
+// Для Blynk
 #include <BlynkSimpleEsp8266.h>
+// Для функций времени
 #include <TimeLib.h>
 #include <WidgetRTC.h>
+// Для датчика температуры
 #include "DHTesp.h"
+//Для OTA
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 
 
-char auth[] = "*********************";  //Ключ авторизации Blynk
+char auth[] = "*********************************";  //Ключ авторизации Blynk
 
 // Варианты сетей
 char* net[NUMBER_OF_SSID] = {"AlexP", "FreeWifi", "MGTS_GPON_3107", "Pressa"};  // Названия сетей
-char* pass[NUMBER_OF_SSID] = {"**********", "**********", "**********", "**********"};  // Пароли к сетям
+char* pass[NUMBER_OF_SSID] = {"***********", "**********", "*********", "**********"};  // Пароли к сетям
 
 float t; // Температура -5.0 - 50.0
 uint8_t h; // Влажность 0 - 100
-uint16_t gas; // Газ 0 - 1024 
+uint16_t gas; // Газ 0 - 1024
 
 uint8_t pinV1; // Виртуальный пин для опорной температуры
 bool secureOn; // Флаг включения сигнализации
@@ -66,18 +72,21 @@ BlynkTimer timer; // Создаем объект класса BlynkTimer - за�
 WidgetRTC rtc; // Создаем объект класса WidgetRTC - получение точного времени с сервера
 
 void setup() // Действия при запуске ESP8266
-{  
-  pinMode(PIN_RELAY, OUTPUT); 
+{
+  pinMode(PIN_WDT, OUTPUT);
+  digitalWrite(PIN_WDT, LOW);
+
+  pinMode(PIN_RELAY, OUTPUT);
   digitalWrite(PIN_RELAY, LOW); // выключаем реле
-    
+
   Serial.begin(115200);
-  
+
   controlWiFi(); // Подключаемся к Wifi и серверу Blynk
-     
-  dht.setup(PIN_DHT, DHTesp::DHT11); 
+
+  dht.setup(PIN_DHT, DHTesp::DHT11);
 
   // Главный цикл выполнения каждую третью секунду
-  timer.setInterval(3000L, mainLoop);
+  timer.setInterval(5000L, mainLoop);
 
   // Проверяем WiFi и пробуем подключится, если нет соединения каждые 10 секунд
   timer.setInterval(10000L, controlWiFi);
@@ -87,7 +96,7 @@ void setup() // Действия при запуске ESP8266
 
   // Перезагрузка каждый час
   timer.setInterval(3600000L, Reset);
-  
+
   // Обновление по воздуху
   ArduinoOTA.onStart([]() {
     String type;
@@ -129,16 +138,16 @@ void setup() // Действия при запуске ESP8266
 BLYNK_CONNECTED() {
   //Blynk.syncAll();
 
-  Blynk.syncVirtual(V1, V4); // Получаем с сервера состояние 
+  Blynk.syncVirtual(V1, V4); // Получаем с сервера состояние
 
   //terminal.println("3 2 1 ...");
   Blynk.email(EMAIL, "Кондрово", getDateTime() + " Умный дом запущен");
- 
+
   if (digitalRead(PIN_RELAY)) relayOn = false;
   else relayOn = true;
 
   controlTemp();
-  
+
   rtc.begin();
 }
 
@@ -146,11 +155,11 @@ BLYNK_WRITE(V1) // Пороговая температура
 {
   pinV1 = param.asInt();
 
-  if (pinV1 != 0) 
+  if (pinV1 != 0)
   {
     Serial.print("Держим температуру: ");
     Serial.println(pinV1);
-    
+
     terminal.print("\nДержим температуру: ");
     terminal.println(pinV1);
   }
@@ -173,7 +182,7 @@ BLYNK_WRITE(V4) // Включение сигнализации
   {
     Serial.println("Сигнализация ОТКЛючена");
     terminal.println("\nСигнализация ОТКЛючена");
-    terminal.flush(); 
+    terminal.flush();
   }
 }
 
@@ -188,28 +197,29 @@ void Reset(){
   resetFunc();
 }
 
-void mainLoop() { // Главный цикл 
+void mainLoop() { // Главный цикл
   Send();
   controlPIR();
   controlTemp();
+  watchdog();
 }
 
 void Send() {// Замеряем климат и отправляем в Blynk
   t = dht.getTemperature();
   h = dht.getHumidity();
   gas = analogRead(PIN_MQ2);
-  
+
   Serial.print("t = ");
   Serial.print(t);
   Serial.print(", h = ");
   Serial.print(h);
   Serial.print(", gas = ");
   Serial.println(gas);
-  
+
   Blynk.virtualWrite(V2, t);
   Blynk.virtualWrite(V3, h);
-  Blynk.virtualWrite(V5, gas);  
-  
+  Blynk.virtualWrite(V5, gas);
+
   terminal.print('.');
   terminal.flush();
 }
@@ -217,11 +227,11 @@ void Send() {// Замеряем климат и отправляем в Blynk
 void controlPIR() { // Контроль присутствия
   if (secureOn and (digitalRead(PIN_PIR)) and ((millis() - detectTime) > PIR_DELAY)) {
     detectTime = millis(); // записываем время обнаружения движения
-    
+
     Blynk.notify("Обнаружено движение!");
-    
+
     Blynk.email(EMAIL, "Кондрово", getDateTime() + " - Обнаружено движение!");
-    
+
     Serial.println("Обнаружено движение!");
     terminal.println("\n" + getDateTime() + " - Обнаружено движение!");
     terminal.flush();
@@ -229,7 +239,7 @@ void controlPIR() { // Контроль присутствия
 }
 
 void controlTemp() { // Управление температурой
-  if (t >= MAX_TEMPERATURE) // При достижении MAX_TEMPERATURE принудительно отключать обогреватель 
+  if (t >= MAX_TEMPERATURE) // При достижении MAX_TEMPERATURE принудительно отключать обогреватель
   {
     relayOn = false;
     digitalWrite(PIN_RELAY, LOW); // выключаем реле
@@ -249,17 +259,17 @@ void controlTemp() { // Управление температурой
       Blynk.email(EMAIL, "Кондрово", getDateTime() + " Конвектор ОТКЛючен");
       terminal.println("\nКонвектор ОТКЛючен");
     }
-    
+
     if (pinV1 > 0) // Если Поддержание включено
     {
       if ((t > (pinV1 + 1)) and (relayOn))
       {
-        relayOn = false; 
+        relayOn = false;
         digitalWrite(PIN_RELAY, LOW); // Если перегрев выключаем реле
         Blynk.email(EMAIL, "Кондрово", getDateTime() + " Конвектор ОТКЛючен");
         terminal.println("\nКонвектор ОТКЛючен");
       }
-      
+
       if ((t < pinV1) and (!relayOn))
       {
         relayOn = true;
@@ -281,13 +291,21 @@ void controlWiFi() // Управление соединением
 {
   if (WiFi.status() != WL_CONNECTED)
   {
-    // Перебираем знакомые сети и подключаемся 
-    int i = 0; 
+    // Перебираем знакомые сети и подключаемся
+    int i = 0;
     while (!Blynk.begin(auth, net[i], pass[i]))
     {
       (i == NUMBER_OF_SSID - 1) ? i = 0 : i++;
-    } 
+    }
   }
+}
+
+// Формируем импульс на входе сторожевого таймера
+void watchdog()
+{
+    Serial.println("Формируем импульс на Watchdog");
+    digitalWrite(PIN_WDT, HIGH);
+    digitalWrite(PIN_WDT, LOW);
 }
 
 void loop()
