@@ -43,13 +43,15 @@ V5 - Для отправки значения примесей в воздухе
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <Secrets.h> // Пароли
 
-
+/*
 char auth[] = "*********************************";  //Ключ авторизации Blynk
 
 // Варианты сетей
 char* net[NUMBER_OF_SSID] = {"AlexP", "FreeWifi", "MGTS_GPON_3107", "Pressa"};  // Названия сетей
 char* pass[NUMBER_OF_SSID] = {"***********", "**********", "*********", "**********"};  // Пароли к сетям
+*/
 
 float t; // Температура -5.0 - 50.0
 uint8_t h; // Влажность 0 - 100
